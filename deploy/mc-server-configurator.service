@@ -12,8 +12,9 @@ Environment=NODE_ENV=production
 Environment=MCSC_HOST=0.0.0.0
 Environment=MCSC_PORT=4174
 Environment=MCSC_DATA_DIR=/var/lib/mc-server-configurator
-Environment=MCSC_SERVER_ROOT=/opt/minecraft/servers
+Environment=MCSC_SERVER_ROOT=/home/amacovis/Desktop/minecraft
 Environment=MCSC_BACKUP_ROOT=/opt/minecraft/backups
+Environment=MCSC_CRONTAB_USER=amacovis
 Environment=MCSC_USE_SUDO=true
 ExecStart=/usr/bin/node /opt/mc-server-configurator/dist/server/index.js
 Restart=on-failure
@@ -21,8 +22,7 @@ RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/mc-server-configurator /opt/minecraft/servers /opt/minecraft/backups
+ReadWritePaths=/var/lib/mc-server-configurator /home/amacovis/Desktop/minecraft /opt/minecraft/backups
 
 [Install]
 WantedBy=multi-user.target
-

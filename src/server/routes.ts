@@ -6,10 +6,12 @@ import { config } from "./config.js";
 import { audit, type Db } from "./db.js";
 import { authHandlers, requireAuth } from "./auth.js";
 import { runBackup, validateCron } from "./backups.js";
+import { runCommand } from "./commands.js";
+import { buildImportPreview } from "./discovery.js";
 import { readEditableFile, writeEditableFile } from "./files.js";
 import { getVersions, searchModpacks } from "./modpacks.js";
 import { assertDisplayName, assertJavaArgs, assertMemory, assertPort, editableFiles, resolveServerPath, serviceNameForServerName } from "./security.js";
-import { controlServer, getLogs, importCandidates, listServers, mapServer } from "./systemd.js";
+import { controlServer, getLogs, listServers, mapServer } from "./systemd.js";
 import type { CreateServerRequest, ServerSettingsInput } from "../shared/types.js";
 
 export function createRouter(db: Db) {
@@ -30,19 +32,33 @@ export function createRouter(db: Db) {
     }
   });
 
+  router.get("/servers/import/preview", async (_req, res, next) => {
+    try {
+      res.json(await buildImportPreview(existingImportKeys(db)));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/servers/import", async (req, res, next) => {
     try {
-      const candidates = importCandidates();
+      const preview = await buildImportPreview(existingImportKeys(db));
+      const selectedIds = Array.isArray(req.body?.selectedIds) ? new Set(req.body.selectedIds.map(String)) : undefined;
+      const candidates = preview.items.filter((item) => !selectedIds || selectedIds.has(item.id));
       const now = new Date().toISOString();
       let imported = 0;
       for (const candidate of candidates) {
         const existing = db.prepare("SELECT id FROM servers WHERE directory = ? OR unit_name = ?").get(candidate.directory, candidate.unitName);
         if (existing) continue;
-        db.prepare(
+        const insertServer = db.prepare(
           `INSERT INTO servers
            (id, name, directory, unit_name, port, memory_mb, java_args, rcon_enabled, backup_mode, backup_cron, backup_retention, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'online', '0 4 * * *', 7, ?, ?)`
-        ).run(nanoid(), candidate.name, candidate.directory, candidate.unitName, candidate.port, candidate.memoryMb, candidate.javaArgs, now, now);
+        );
+        const serverId = nanoid();
+        insertServer.run(serverId, candidate.name, candidate.directory, candidate.unitName, candidate.port, candidate.memoryMb, candidate.javaArgs, now, now);
+        persistDiscoveredActions(db, serverId, candidate.scripts, now);
+        persistExternalSchedules(db, serverId, candidate.externalSchedules, now);
         imported += 1;
       }
       audit(db, req.user!.username, "servers.import", "servers", { imported });
@@ -120,6 +136,33 @@ export function createRouter(db: Db) {
       const server = getServer(db, req.params.id);
       res.type("text/plain").send(await getLogs(server.unitName, Number(req.query.lines ?? 200)));
     } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/servers/:id/actions", (req, res, next) => {
+    try {
+      getServer(db, req.params.id);
+      res.json(db.prepare("SELECT id, server_id AS serverId, name, kind, script_path AS scriptPath, created_at AS createdAt FROM server_actions WHERE server_id = ? ORDER BY kind, name").all(req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/servers/:id/actions/:actionId/run", async (req, res, next) => {
+    try {
+      const server = getServer(db, req.params.id);
+      const action = db.prepare("SELECT * FROM server_actions WHERE id = ? AND server_id = ?").get(req.params.actionId, server.id) as
+        | { id: string; name: string; kind: string; script_path: string }
+        | undefined;
+      if (!action) throw new Error("Server action not found.");
+      const scriptPath = resolveServerPath(server.directory, path.relative(server.directory, action.script_path));
+      const result = await runCommand(scriptPath, [], 120_000);
+      audit(db, req.user!.username, "servers.action_run", server.name, { action: action.name, code: result.code });
+      if (result.code !== 0) throw new Error(result.stderr || `${action.name} failed.`);
+      res.json({ ok: true, stdout: result.stdout, stderr: result.stderr });
+    } catch (error) {
+      audit(db, req.user?.username ?? "unknown", "servers.action_failed", req.params.id, { actionId: req.params.actionId, error: String(error) });
       next(error);
     }
   });
@@ -246,6 +289,22 @@ export function createRouter(db: Db) {
     }
   });
 
+  router.get("/servers/:id/external-schedules", (req, res, next) => {
+    try {
+      getServer(db, req.params.id);
+      res.json(
+        db
+          .prepare(
+            `SELECT id, server_id AS serverId, kind, expression, command, source, read_only AS readOnly, created_at AS createdAt
+             FROM external_schedules WHERE server_id = ? ORDER BY kind, expression`
+          )
+          .all(req.params.id)
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/modpacks/search", async (req, res, next) => {
     try {
       res.json(await searchModpacks(String(req.query.q ?? "")));
@@ -295,6 +354,31 @@ function getServerRow(db: Db, id: string) {
 
 function getServer(db: Db, id: string) {
   return mapServer(getServerRow(db, id));
+}
+
+function existingImportKeys(db: Db) {
+  return db.prepare("SELECT directory, unit_name AS unitName FROM servers").all() as Array<{ directory: string; unitName: string }>;
+}
+
+function persistDiscoveredActions(db: Db, serverId: string, scripts: Array<{ id: string; name: string; kind: string; path: string; safe: boolean }>, now: string) {
+  const insert = db.prepare("INSERT OR IGNORE INTO server_actions (id, server_id, name, kind, script_path, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+  for (const script of scripts.filter((item) => item.safe)) {
+    insert.run(nanoid(), serverId, script.name, script.kind, script.path, now);
+  }
+}
+
+function persistExternalSchedules(
+  db: Db,
+  serverId: string,
+  schedules: Array<{ kind: string; expression: string; command: string; source: string; readOnly: boolean }>,
+  now: string
+) {
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO external_schedules (id, server_id, kind, expression, command, source, read_only, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  );
+  for (const schedule of schedules) {
+    insert.run(nanoid(), serverId, schedule.kind, schedule.expression, schedule.command, schedule.source, schedule.readOnly ? 1 : 0, now);
+  }
 }
 
 async function createServerFromJob(

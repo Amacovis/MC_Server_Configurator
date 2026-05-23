@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_USER="${MCSC_USER:-mcsc}"
 APP_DIR="${MCSC_APP_DIR:-/opt/mc-server-configurator}"
-SERVER_ROOT="${MCSC_SERVER_ROOT:-/opt/minecraft/servers}"
+SERVER_ROOT="${MCSC_SERVER_ROOT:-/home/amacovis/Desktop/minecraft}"
 BACKUP_ROOT="${MCSC_BACKUP_ROOT:-/opt/minecraft/backups}"
 DATA_DIR="${MCSC_DATA_DIR:-/var/lib/mc-server-configurator}"
 
@@ -26,4 +26,3 @@ systemctl enable mc-server-configurator.service
 
 echo "Installed. Set MCSC_INITIAL_PASSWORD in /etc/systemd/system/mc-server-configurator.service before first start if you do not want the default bootstrap password."
 echo "Start with: sudo systemctl start mc-server-configurator"
-
