@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import { discoverJavaArgs } from "./javaArgs.js";
 import { runCommand } from "./commands.js";
 import { assertServiceName } from "./security.js";
 import type {
@@ -42,6 +43,7 @@ export async function buildImportPreview(existingServers: Array<{ directory: str
     const unitName = unitOverrides.get(id) ?? detectedUnitName;
     const scripts = discoverScripts(folder.directory);
     const schedules = matchSchedules(folder.directory, unitName, scripts, cronEntries);
+    const discoveredJavaArgs = discoverJavaArgs(folder.directory, match.unit);
     const alreadyImported = existingServers.some((server) => server.directory === folder.directory || server.unitName === unitName);
     const warnings = [
       ...(match.confidence === "low" ? ["Only a naming-pattern service match was found. Review before import."] : []),
@@ -57,8 +59,11 @@ export async function buildImportPreview(existingServers: Array<{ directory: str
       unitMatchSource: match.source,
       confidence: match.confidence,
       port: readPort(path.join(folder.directory, "server.properties")),
-      memoryMb: 4096,
-      javaArgs: "-Xms1G",
+      memoryMb: discoveredJavaArgs.memoryMb ?? 4096,
+      javaArgs: discoveredJavaArgs.javaArgs,
+      javaArgsSourceType: discoveredJavaArgs.sourceType,
+      javaArgsSourcePath: discoveredJavaArgs.sourcePath,
+      javaArgsEditable: discoveredJavaArgs.editable,
       alreadyImported,
       scripts,
       externalSchedules: schedules,

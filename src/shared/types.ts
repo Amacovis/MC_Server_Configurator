@@ -5,6 +5,7 @@ export type ModpackProvider = "modrinth" | "curseforge";
 export type DiscoveryConfidence = "high" | "medium" | "low" | "unmatched";
 export type ServerActionKind = "backup" | "restart" | "start" | "stop" | "custom";
 export type ExternalScheduleKind = "backup" | "restart" | "unknown";
+export type JavaArgsSourceType = "user_jvm_args" | "script" | "systemd" | "default";
 
 export interface ManagedServer {
   id: string;
@@ -15,6 +16,9 @@ export interface ManagedServer {
   port: number;
   memoryMb: number;
   javaArgs: string;
+  javaArgsSourceType: JavaArgsSourceType;
+  javaArgsSourcePath?: string;
+  javaArgsEditable: boolean;
   modpackProvider?: ModpackProvider;
   modpackId?: string;
   modpackName?: string;
@@ -32,6 +36,9 @@ export interface ServerSettingsInput {
   port: number;
   memoryMb: number;
   javaArgs: string;
+  javaArgsSourceType: JavaArgsSourceType;
+  javaArgsSourcePath?: string;
+  javaArgsEditable: boolean;
   rconEnabled: boolean;
   backupMode: BackupMode;
   backupCron: string;
@@ -140,6 +147,9 @@ export interface ImportPreviewItem {
   port: number;
   memoryMb: number;
   javaArgs: string;
+  javaArgsSourceType: JavaArgsSourceType;
+  javaArgsSourcePath?: string;
+  javaArgsEditable: boolean;
   alreadyImported: boolean;
   scripts: DiscoveredScript[];
   externalSchedules: ExternalSchedule[];
@@ -170,4 +180,12 @@ export interface ServiceTestResult {
 export interface ImportSelection {
   id: string;
   unitName?: string;
+}
+
+export interface JavaArgsDiscovery {
+  javaArgs: string;
+  sourceType: JavaArgsSourceType;
+  sourcePath?: string;
+  editable: boolean;
+  memoryMb?: number;
 }

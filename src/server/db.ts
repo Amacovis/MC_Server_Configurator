@@ -105,6 +105,16 @@ function migrate(db: Db) {
       UNIQUE(server_id, expression, command)
     );
   `);
+  addColumnIfMissing(db, "servers", "java_args_source_type", "TEXT");
+  addColumnIfMissing(db, "servers", "java_args_source_path", "TEXT");
+  addColumnIfMissing(db, "servers", "java_args_editable", "INTEGER NOT NULL DEFAULT 0");
+}
+
+function addColumnIfMissing(db: Db, table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((item) => item.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 function seedAdmin(db: Db) {
