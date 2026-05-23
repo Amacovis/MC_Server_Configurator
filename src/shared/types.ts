@@ -28,6 +28,7 @@ export interface ManagedServer {
 
 export interface ServerSettingsInput {
   name: string;
+  unitName: string;
   port: number;
   memoryMb: number;
   javaArgs: string;
@@ -158,4 +159,15 @@ export interface ServerAction {
   kind: ServerActionKind;
   scriptPath: string;
   createdAt: string;
+}
+
+export interface ServiceTestResult {
+  existsLikely: boolean;
+  status: "active" | "inactive" | "failed" | "unknown" | "not-found";
+  message: string;
+}
+
+export interface ImportSelection {
+  id: string;
+  unitName?: string;
 }

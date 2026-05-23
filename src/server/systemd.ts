@@ -5,6 +5,7 @@ import { journalctlArgs, runCommand, systemctlArgs } from "./commands.js";
 import { config } from "./config.js";
 import { assertServiceName } from "./security.js";
 import type { ManagedServer, ServerStatus } from "../shared/types.js";
+import type { ServiceTestResult } from "../shared/types.js";
 
 type ServerRow = Record<string, unknown>;
 
@@ -40,6 +41,36 @@ export async function getStatus(unitName: string): Promise<ServerStatus> {
   return "unknown";
 }
 
+export async function testService(unitName: string): Promise<ServiceTestResult> {
+  const safeUnit = assertServiceName(unitName);
+  const [command, ...args] = systemctlArgs("is-active", safeUnit);
+  const result = await runCommand(command, args, 10_000);
+  const output = `${result.stdout}\n${result.stderr}`.trim().toLowerCase();
+  const rawStatus = result.stdout.trim();
+
+  if (rawStatus === "active" || rawStatus === "inactive" || rawStatus === "failed") {
+    return {
+      existsLikely: true,
+      status: rawStatus,
+      message: `${safeUnit} is ${rawStatus}.`
+    };
+  }
+
+  if (output.includes("not-found") || output.includes("could not be found") || output.includes("not loaded")) {
+    return {
+      existsLikely: false,
+      status: "not-found",
+      message: `${safeUnit} was not found by systemd. You can still save it if the service will be created or systemd cannot see it yet.`
+    };
+  }
+
+  return {
+    existsLikely: result.code === 0,
+    status: "unknown",
+    message: result.code === 0 ? `${safeUnit} returned an unknown state.` : `${safeUnit} could not be confirmed. You can still save it.`
+  };
+}
+
 export async function controlServer(unitName: string, action: "start" | "stop" | "restart") {
   const [command, ...args] = systemctlArgs(action, unitName);
   const result = await runCommand(command, args, 45_000);
@@ -52,6 +83,21 @@ export async function getLogs(unitName: string, lines: number) {
   const result = await runCommand(command, args, 15_000);
   if (result.code !== 0) throw new Error(result.stderr || "journalctl failed");
   return result.stdout;
+}
+
+export async function discoverCandidateServices() {
+  if (config.mockCommands) return [];
+  const result = await runCommand("systemctl", ["list-units", "--type=service", "--all", "--no-legend", "--plain"], 20_000);
+  if (result.code !== 0) return [];
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [unitName, load, active, sub, ...description] = line.split(/\s+/);
+      return { unitName, load, active, sub, description: description.join(" ") };
+    })
+    .filter((item) => item.unitName?.endsWith(".service"));
 }
 
 export async function listServers(db: Db) {
@@ -84,4 +130,3 @@ function readPort(filePath: string) {
   const line = fs.readFileSync(filePath, "utf8").split(/\r?\n/).find((item) => item.startsWith("server-port="));
   return line ? Number(line.split("=")[1]) || 25565 : 25565;
 }
-

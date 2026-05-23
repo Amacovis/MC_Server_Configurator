@@ -18,7 +18,7 @@ import {
   Terminal,
   Wrench
 } from "lucide-react";
-import type { AuthUser, CreateServerRequest, EditableFile, InstallJob, ManagedServer, ModpackSearchResult, ModpackVersion } from "../shared/types";
+import type { AuthUser, CreateServerRequest, EditableFile, InstallJob, ManagedServer, ModpackSearchResult, ModpackVersion, ServiceTestResult } from "../shared/types";
 import type { ExternalSchedule, ImportPreview, ServerAction } from "../shared/types";
 import "./styles.css";
 
@@ -206,6 +206,7 @@ function Servers() {
 
 function ImportPreviewPanel({ preview, onClose, onImported }: { preview: ImportPreview; onClose: () => void; onImported: (servers: ManagedServer[]) => void }) {
   const [selected, setSelected] = useState(() => new Set(preview.items.filter((item) => !item.alreadyImported && item.confidence !== "unmatched").map((item) => item.id)));
+  const [unitNames, setUnitNames] = useState(() => Object.fromEntries(preview.items.map((item) => [item.id, item.unitName])));
   const [message, setMessage] = useState("");
 
   function toggle(id: string) {
@@ -218,7 +219,7 @@ function ImportPreviewPanel({ preview, onClose, onImported }: { preview: ImportP
   async function confirmImport() {
     const result = await api.request<{ imported: number; servers: ManagedServer[] }>("/servers/import", {
       method: "POST",
-      body: JSON.stringify({ selectedIds: Array.from(selected) })
+      body: JSON.stringify({ selections: Array.from(selected).map((id) => ({ id, unitName: unitNames[id] })) })
     });
     setMessage(`Imported ${result.imported} server${result.imported === 1 ? "" : "s"}.`);
     onImported(result.servers);
@@ -239,6 +240,12 @@ function ImportPreviewPanel({ preview, onClose, onImported }: { preview: ImportP
               <strong>{item.name}</strong>
               <small>{item.directory}</small>
               <small>{item.unitName} - {item.confidence} via {item.unitMatchSource}</small>
+              <input
+                value={unitNames[item.id] ?? ""}
+                disabled={item.alreadyImported}
+                onChange={(event) => setUnitNames({ ...unitNames, [item.id]: event.target.value })}
+                aria-label={`Systemd service for ${item.name}`}
+              />
               <small>{item.scripts.filter((script) => script.safe).length} safe scripts, {item.externalSchedules.length} external schedules</small>
               {item.warnings.length > 0 && <small className="warnText">{item.warnings.join(" ")}</small>}
             </span>
@@ -362,6 +369,8 @@ function ServerActions({ server }: { server: ManagedServer }) {
 function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: () => void }) {
   const [form, setForm] = useState(server);
   const [message, setMessage] = useState("");
+  const [serviceTest, setServiceTest] = useState<ServiceTestResult | null>(null);
+  const [testing, setTesting] = useState(false);
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -370,9 +379,29 @@ function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: (
     onSaved();
   }
 
+  async function testCurrentService() {
+    setTesting(true);
+    setServiceTest(null);
+    try {
+      setServiceTest(await api.request<ServiceTestResult>(`/servers/${server.id}/service/test`, {
+        method: "POST",
+        body: JSON.stringify({ unitName: form.unitName })
+      }));
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <form className="panel formGrid" onSubmit={save}>
       <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+      <label className="serviceField">
+        Systemd service
+        <span>
+          <input value={form.unitName} onChange={(e) => setForm({ ...form, unitName: e.target.value })} />
+          <button type="button" onClick={testCurrentService} disabled={testing}>{testing ? "Testing..." : "Test"}</button>
+        </span>
+      </label>
       <label>Port<input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) })} /></label>
       <label>Memory MB<input type="number" value={form.memoryMb} onChange={(e) => setForm({ ...form, memoryMb: Number(e.target.value) })} /></label>
       <label>Java args<input value={form.javaArgs} onChange={(e) => setForm({ ...form, javaArgs: e.target.value })} /></label>
@@ -380,6 +409,7 @@ function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: (
       <label>Retention<input type="number" value={form.backupRetention} onChange={(e) => setForm({ ...form, backupRetention: Number(e.target.value) })} /></label>
       <label className="check"><input type="checkbox" checked={form.rconEnabled} onChange={(e) => setForm({ ...form, rconEnabled: e.target.checked })} />RCON enabled</label>
       <label>Backup mode<select value={form.backupMode} onChange={(e) => setForm({ ...form, backupMode: e.target.value as ManagedServer["backupMode"] })}><option value="online">Online</option><option value="stop_then_backup">Stop then backup</option></select></label>
+      {serviceTest && <p className={serviceTest.existsLikely ? "ok serviceResult" : "warn serviceResult"}>{serviceTest.message}</p>}
       <div className="formActions"><button className="primary"><Save size={16} />Save</button>{message && <span className="ok">{message}</span>}</div>
     </form>
   );

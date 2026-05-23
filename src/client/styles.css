@@ -211,6 +211,11 @@ label {
   gap: 3px;
 }
 
+.previewItem input[type="text"],
+.previewItem input:not([type]) {
+  margin-top: 5px;
+}
+
 .serverCard,
 .panel,
 .empty {
@@ -350,6 +355,21 @@ dd {
 
 .formActions {
   grid-column: 1 / -1;
+}
+
+.serviceField {
+  grid-column: 1 / -1;
+}
+
+.serviceField span {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.serviceResult {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .fileList {
