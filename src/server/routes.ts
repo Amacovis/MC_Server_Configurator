@@ -148,6 +148,23 @@ export function createRouter(db: Db) {
     }
   });
 
+  router.delete("/servers/:id", (req, res, next) => {
+    try {
+      const server = getServer(db, req.params.id);
+      db.prepare("UPDATE jobs SET server_id = NULL WHERE server_id = ?").run(server.id);
+      db.prepare("DELETE FROM servers WHERE id = ?").run(server.id);
+      audit(db, req.user!.username, "servers.unregister", server.name, {
+        id: server.id,
+        directory: server.directory,
+        unitName: server.unitName,
+        filesDeleted: false
+      });
+      res.json({ ok: true, filesDeleted: false });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/servers/:id/logs", async (req, res, next) => {
     try {
       const server = getServer(db, req.params.id);
