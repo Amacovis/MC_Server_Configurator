@@ -40,7 +40,7 @@ export async function getStatus(unitName: string): Promise<ServerStatus> {
   const value = result.stdout.trim();
   if (value === "active") return "running";
   if (value === "inactive") return "stopped";
-  if (value === "failed") return "failed";
+  if (value === "failed") return "stopped";
   return "unknown";
 }
 
@@ -78,6 +78,10 @@ export async function controlServer(unitName: string, action: "start" | "stop" |
   const [command, ...args] = systemctlArgs(action, unitName);
   const result = await runCommand(command, args, 45_000);
   if (result.code !== 0) throw new Error(result.stderr || `systemctl ${action} failed`);
+  if (action === "stop") {
+    const [resetCommand, ...resetArgs] = systemctlArgs("reset-failed", unitName);
+    await runCommand(resetCommand, resetArgs, 10_000);
+  }
   return result;
 }
 

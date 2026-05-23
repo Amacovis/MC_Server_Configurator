@@ -8,7 +8,7 @@ export interface CommandResult {
   code: number;
 }
 
-export function systemctlArgs(action: "start" | "stop" | "restart" | "is-active", unitName: string) {
+export function systemctlArgs(action: "start" | "stop" | "restart" | "is-active" | "reset-failed", unitName: string) {
   return ["systemctl", action, assertServiceName(unitName)];
 }
 
@@ -58,6 +58,7 @@ export function resolveCommand(command: string) {
 }
 
 function mockOutput(command: string, args: string[]) {
+  if (command === "systemctl" && args[0] === "is-active" && args[1] === "minecraft4.service") return "failed\n";
   if (command === "systemctl" && args[0] === "is-active") return "inactive\n";
   if (command === "journalctl") return "2026-05-23T12:00:00 mock minecraft server log line\n";
   return `mocked ${command} ${args.join(" ")}\n`;
