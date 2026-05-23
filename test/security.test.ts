@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { journalctlArgs, systemctlArgs } from "../src/server/commands";
-import { assertJavaArgs, assertPort, editableFileForKey, serviceNameForServerName } from "../src/server/security";
+import { assertJavaArgs, assertPort, assertServiceName, editableFileForKey, serviceNameForServerName } from "../src/server/security";
 
 describe("command safety", () => {
   it("builds systemctl arguments without shell interpolation", () => {
@@ -10,6 +10,14 @@ describe("command safety", () => {
   it("rejects unsafe service names", () => {
     expect(() => systemctlArgs("stop", "minecraft;reboot.service")).toThrow();
     expect(() => journalctlArgs("../minecraft.service")).toThrow();
+  });
+
+  it("accepts numbered minecraft service names", () => {
+    expect(assertServiceName("minecraft-service.service")).toBe("minecraft-service.service");
+    expect(assertServiceName("minecraft2-service.service")).toBe("minecraft2-service.service");
+    expect(assertServiceName("minecraft3-service.service")).toBe("minecraft3-service.service");
+    expect(() => assertServiceName("minecraft-service")).toThrow();
+    expect(() => assertServiceName("minecraft2-service.service;reboot")).toThrow();
   });
 
   it("validates ports and java args", () => {
@@ -28,4 +36,3 @@ describe("command safety", () => {
     expect(serviceNameForServerName("Family SMP")).toBe("minecraft-family-smp.service");
   });
 });
-

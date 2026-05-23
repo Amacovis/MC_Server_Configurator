@@ -28,16 +28,18 @@ export interface CronEntry {
   source: string;
 }
 
-export async function buildImportPreview(existingServers: Array<{ directory: string; unitName: string }> = []): Promise<ImportPreview> {
+export async function buildImportPreview(existingServers: Array<{ directory: string; unitName: string }> = [], unitOverrides = new Map<string, string>()): Promise<ImportPreview> {
   const folders = listServerFolders(config.serverRoot);
   const units = await discoverSystemdUnits();
   const cronEntries = parseCrontab(await readCrontab());
   const usedUnits = new Set<string>();
 
   const items = folders.map((folder) => {
+    const id = stableId(folder.directory);
     const match = matchFolderToUnit(folder.directory, units);
     if (match.unit?.unitName) usedUnits.add(match.unit.unitName);
-    const unitName = match.unit?.unitName ?? assertServiceName(`minecraft-${folder.basename.replace(/[^A-Za-z0-9_.-]/g, "-")}.service`);
+    const detectedUnitName = match.unit?.unitName ?? assertServiceName(`minecraft-${folder.basename.replace(/[^A-Za-z0-9_.-]/g, "-")}.service`);
+    const unitName = unitOverrides.get(id) ?? detectedUnitName;
     const scripts = discoverScripts(folder.directory);
     const schedules = matchSchedules(folder.directory, unitName, scripts, cronEntries);
     const alreadyImported = existingServers.some((server) => server.directory === folder.directory || server.unitName === unitName);
@@ -48,7 +50,7 @@ export async function buildImportPreview(existingServers: Array<{ directory: str
     ];
 
     return {
-      id: stableId(folder.directory),
+      id,
       name: folder.basename.replace(/[-_]+/g, " "),
       directory: folder.directory,
       unitName,

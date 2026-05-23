@@ -1,11 +1,11 @@
-mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft-*.service
-mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl stop minecraft-*.service
-mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl restart minecraft-*.service
-mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl is-active minecraft-*.service
+mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft*.service
+mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl stop minecraft*.service
+mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl restart minecraft*.service
+mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl is-active minecraft*.service
 mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl list-units --type=service --all --no-legend --plain
 mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl show *.service --property=Id\,Description\,WorkingDirectory\,ExecStart\,FragmentPath --no-pager
-mcsc ALL=(root) NOPASSWD: /usr/bin/journalctl -u minecraft-*.service *
+mcsc ALL=(root) NOPASSWD: /usr/bin/journalctl -u minecraft*.service *
 mcsc ALL=(root) NOPASSWD: /usr/bin/tar -czf /opt/minecraft/backups/* -C /home/amacovis/Desktop/minecraft/* .
 mcsc ALL=(root) NOPASSWD: /usr/bin/crontab -u amacovis -l
 mcsc ALL=(root) NOPASSWD: /home/amacovis/Desktop/minecraft/*/*.sh
-mcsc ALL=(root) NOPASSWD: /usr/local/bin/mcsc-rcon minecraft-*.service *
+mcsc ALL=(root) NOPASSWD: /usr/local/bin/mcsc-rcon minecraft*.service *

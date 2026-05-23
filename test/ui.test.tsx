@@ -12,6 +12,19 @@ function SmokePanel() {
   );
 }
 
+function SettingsSmoke() {
+  return (
+    <form>
+      <label>
+        Systemd service
+        <input defaultValue="minecraft2-service.service" />
+      </label>
+      <button type="button">Test</button>
+      <button>Save</button>
+    </form>
+  );
+}
+
 describe("ui smoke", () => {
   it("renders primary server actions", () => {
     render(<SmokePanel />);
@@ -19,5 +32,11 @@ describe("ui smoke", () => {
     expect(screen.getByRole("button", { name: "Import" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New server" })).toBeInTheDocument();
   });
-});
 
+  it("renders service editing controls", () => {
+    render(<SettingsSmoke />);
+    expect(screen.getByLabelText("Systemd service")).toHaveValue("minecraft2-service.service");
+    expect(screen.getByRole("button", { name: "Test" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+});

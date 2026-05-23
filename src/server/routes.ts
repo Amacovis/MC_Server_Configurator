@@ -11,8 +11,9 @@ import { buildImportPreview } from "./discovery.js";
 import { readEditableFile, writeEditableFile } from "./files.js";
 import { getVersions, searchModpacks } from "./modpacks.js";
 import { assertDisplayName, assertJavaArgs, assertMemory, assertPort, editableFiles, resolveServerPath, serviceNameForServerName } from "./security.js";
-import { controlServer, getLogs, listServers, mapServer } from "./systemd.js";
-import type { CreateServerRequest, ServerSettingsInput } from "../shared/types.js";
+import { assertServiceName } from "./security.js";
+import { controlServer, discoverCandidateServices, getLogs, listServers, mapServer, testService } from "./systemd.js";
+import type { CreateServerRequest, ImportSelection, ServerSettingsInput } from "../shared/types.js";
 
 export function createRouter(db: Db) {
   const router = express.Router();
@@ -42,21 +43,22 @@ export function createRouter(db: Db) {
 
   router.post("/servers/import", async (req, res, next) => {
     try {
-      const preview = await buildImportPreview(existingImportKeys(db));
-      const selectedIds = Array.isArray(req.body?.selectedIds) ? new Set(req.body.selectedIds.map(String)) : undefined;
-      const candidates = preview.items.filter((item) => !selectedIds || selectedIds.has(item.id));
+      const selections = normalizeImportSelections(req.body);
+      const preview = await buildImportPreview(existingImportKeys(db), new Map(Array.from(selections ?? []).flatMap(([id, unitName]) => unitName ? [[id, unitName]] : [])));
+      const candidates = preview.items.filter((item) => !selections || selections.has(item.id));
       const now = new Date().toISOString();
       let imported = 0;
       for (const candidate of candidates) {
         const existing = db.prepare("SELECT id FROM servers WHERE directory = ? OR unit_name = ?").get(candidate.directory, candidate.unitName);
         if (existing) continue;
+        const unitName = assertServiceName(selections?.get(candidate.id) ?? candidate.unitName);
         const insertServer = db.prepare(
           `INSERT INTO servers
            (id, name, directory, unit_name, port, memory_mb, java_args, rcon_enabled, backup_mode, backup_cron, backup_retention, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'online', '0 4 * * *', 7, ?, ?)`
         );
         const serverId = nanoid();
-        insertServer.run(serverId, candidate.name, candidate.directory, candidate.unitName, candidate.port, candidate.memoryMb, candidate.javaArgs, now, now);
+        insertServer.run(serverId, candidate.name, candidate.directory, unitName, candidate.port, candidate.memoryMb, candidate.javaArgs, now, now);
         persistDiscoveredActions(db, serverId, candidate.scripts, now);
         persistExternalSchedules(db, serverId, candidate.externalSchedules, now);
         imported += 1;
@@ -140,6 +142,16 @@ export function createRouter(db: Db) {
     }
   });
 
+  router.post("/servers/:id/service/test", async (req, res, next) => {
+    try {
+      getServer(db, req.params.id);
+      const unitName = assertServiceName(String(req.body?.unitName ?? ""));
+      res.json(await testService(unitName));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/servers/:id/actions", (req, res, next) => {
     try {
       getServer(db, req.params.id);
@@ -181,6 +193,7 @@ export function createRouter(db: Db) {
       const body = req.body as ServerSettingsInput;
       const updated = {
         name: assertDisplayName(body.name),
+        unitName: assertServiceName(body.unitName),
         port: assertPort(Number(body.port)),
         memoryMb: assertMemory(Number(body.memoryMb)),
         javaArgs: assertJavaArgs(body.javaArgs ?? ""),
@@ -190,10 +203,11 @@ export function createRouter(db: Db) {
         backupRetention: Math.min(Math.max(Number(body.backupRetention) || 7, 1), 90)
       };
       db.prepare(
-        `UPDATE servers SET name = ?, port = ?, memory_mb = ?, java_args = ?, rcon_enabled = ?, backup_mode = ?,
+        `UPDATE servers SET name = ?, unit_name = ?, port = ?, memory_mb = ?, java_args = ?, rcon_enabled = ?, backup_mode = ?,
          backup_cron = ?, backup_retention = ?, updated_at = ? WHERE id = ?`
       ).run(
         updated.name,
+        updated.unitName,
         updated.port,
         updated.memoryMb,
         updated.javaArgs,
@@ -204,7 +218,7 @@ export function createRouter(db: Db) {
         new Date().toISOString(),
         existing.id
       );
-      audit(db, req.user!.username, "servers.settings_update", existing.name, updated);
+      audit(db, req.user!.username, "servers.settings_update", existing.name, { ...updated, previousUnitName: existing.unitName });
       res.json(mapServer(getServerRow(db, existing.id)));
     } catch (error) {
       next(error);
@@ -339,6 +353,14 @@ export function createRouter(db: Db) {
     });
   });
 
+  router.get("/systemd/services", async (_req, res, next) => {
+    try {
+      res.json(await discoverCandidateServices());
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/audit", (_req, res) => {
     res.json(db.prepare("SELECT * FROM audit_events ORDER BY created_at DESC LIMIT 100").all());
   });
@@ -358,6 +380,17 @@ function getServer(db: Db, id: string) {
 
 function existingImportKeys(db: Db) {
   return db.prepare("SELECT directory, unit_name AS unitName FROM servers").all() as Array<{ directory: string; unitName: string }>;
+}
+
+function normalizeImportSelections(body: unknown) {
+  const value = body as { selectedIds?: unknown[]; selections?: ImportSelection[] } | undefined;
+  if (Array.isArray(value?.selections)) {
+    return new Map(value.selections.map((item) => [String(item.id), item.unitName ? assertServiceName(String(item.unitName)) : undefined]));
+  }
+  if (Array.isArray(value?.selectedIds)) {
+    return new Map(value.selectedIds.map((id) => [String(id), undefined]));
+  }
+  return undefined;
 }
 
 function persistDiscoveredActions(db: Db, serverId: string, scripts: Array<{ id: string; name: string; kind: string; path: string; safe: boolean }>, now: string) {
