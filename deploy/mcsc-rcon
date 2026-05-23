@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UNIT_NAME="${1:?unit name required}"
+shift
+COMMAND="${*:?command required}"
+
+echo "Configure this helper to send '$COMMAND' to $UNIT_NAME through mcrcon or your console bridge." >&2
+exit 2
+
