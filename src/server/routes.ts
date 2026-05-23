@@ -7,8 +7,9 @@ import { audit, type Db } from "./db.js";
 import { authHandlers, requireAuth } from "./auth.js";
 import { runBackup, validateCron } from "./backups.js";
 import { runCommand } from "./commands.js";
-import { buildImportPreview } from "./discovery.js";
+import { buildImportPreview, discoverSystemdUnits } from "./discovery.js";
 import { readEditableFile, writeEditableFile } from "./files.js";
+import { discoverJavaArgs, writeUserJvmArgs } from "./javaArgs.js";
 import { getVersions, searchModpacks } from "./modpacks.js";
 import { assertDisplayName, assertJavaArgs, assertMemory, assertPort, editableFiles, resolveServerPath, serviceNameForServerName } from "./security.js";
 import { assertServiceName } from "./security.js";
@@ -54,11 +55,25 @@ export function createRouter(db: Db) {
         const unitName = assertServiceName(selections?.get(candidate.id) ?? candidate.unitName);
         const insertServer = db.prepare(
           `INSERT INTO servers
-           (id, name, directory, unit_name, port, memory_mb, java_args, rcon_enabled, backup_mode, backup_cron, backup_retention, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'online', '0 4 * * *', 7, ?, ?)`
+           (id, name, directory, unit_name, port, memory_mb, java_args, java_args_source_type, java_args_source_path, java_args_editable,
+            rcon_enabled, backup_mode, backup_cron, backup_retention, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'online', '0 4 * * *', 7, ?, ?)`
         );
         const serverId = nanoid();
-        insertServer.run(serverId, candidate.name, candidate.directory, unitName, candidate.port, candidate.memoryMb, candidate.javaArgs, now, now);
+        insertServer.run(
+          serverId,
+          candidate.name,
+          candidate.directory,
+          unitName,
+          candidate.port,
+          candidate.memoryMb,
+          candidate.javaArgs,
+          candidate.javaArgsSourceType,
+          candidate.javaArgsSourcePath ?? null,
+          candidate.javaArgsEditable ? 1 : 0,
+          now,
+          now
+        );
         persistDiscoveredActions(db, serverId, candidate.scripts, now);
         persistExternalSchedules(db, serverId, candidate.externalSchedules, now);
         imported += 1;
@@ -187,6 +202,30 @@ export function createRouter(db: Db) {
     }
   });
 
+  router.post("/servers/:id/java-args/refresh", async (req, res, next) => {
+    try {
+      const server = getServer(db, req.params.id);
+      const unit = (await discoverSystemdUnits()).find((item) => item.unitName === server.unitName) ?? { unitName: server.unitName };
+      const discovery = discoverJavaArgs(server.directory, unit);
+      db.prepare(
+        `UPDATE servers SET java_args = ?, memory_mb = ?, java_args_source_type = ?, java_args_source_path = ?,
+         java_args_editable = ?, updated_at = ? WHERE id = ?`
+      ).run(
+        discovery.javaArgs,
+        discovery.memoryMb ?? server.memoryMb,
+        discovery.sourceType,
+        discovery.sourcePath ?? null,
+        discovery.editable ? 1 : 0,
+        new Date().toISOString(),
+        server.id
+      );
+      audit(db, req.user!.username, "servers.java_args_refresh", server.name, discovery);
+      res.json(mapServer(getServerRow(db, server.id)));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.put("/servers/:id/settings", (req, res, next) => {
     try {
       const existing = getServer(db, req.params.id);
@@ -202,6 +241,10 @@ export function createRouter(db: Db) {
         backupCron: validateCron(body.backupCron),
         backupRetention: Math.min(Math.max(Number(body.backupRetention) || 7, 1), 90)
       };
+      if (existing.javaArgsEditable && existing.javaArgsSourcePath) {
+        const sourcePath = resolveServerPath(existing.directory, path.relative(existing.directory, existing.javaArgsSourcePath));
+        writeUserJvmArgs(sourcePath, updated.javaArgs, updated.memoryMb);
+      }
       db.prepare(
         `UPDATE servers SET name = ?, unit_name = ?, port = ?, memory_mb = ?, java_args = ?, rcon_enabled = ?, backup_mode = ?,
          backup_cron = ?, backup_retention = ?, updated_at = ? WHERE id = ?`
@@ -438,9 +481,10 @@ async function createServerFromJob(
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO servers
-     (id, name, directory, unit_name, port, memory_mb, java_args, modpack_provider, modpack_id, modpack_name,
+     (id, name, directory, unit_name, port, memory_mb, java_args, java_args_source_type, java_args_source_path, java_args_editable,
+      modpack_provider, modpack_id, modpack_name,
       rcon_enabled, backup_mode, backup_cron, backup_retention, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'online', '0 4 * * *', 7, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'default', NULL, 0, ?, ?, ?, 0, 'online', '0 4 * * *', 7, ?, ?)`
   ).run(serverId, input.name, directory, unitName, input.port, input.memoryMb, input.javaArgs, input.provider, input.modpackId, input.modpackName, now, now);
 
   updateJob(db, jobId, "completed", "Server registered", 100, "Server directory and app registration created.", serverId);

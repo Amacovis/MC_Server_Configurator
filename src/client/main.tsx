@@ -392,6 +392,13 @@ function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: (
     }
   }
 
+  async function refreshJavaArgs() {
+    const refreshed = await api.request<ManagedServer>(`/servers/${server.id}/java-args/refresh`, { method: "POST" });
+    setForm(refreshed);
+    setMessage("JVM args refreshed from server files.");
+    onSaved();
+  }
+
   return (
     <form className="panel formGrid" onSubmit={save}>
       <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
@@ -404,7 +411,21 @@ function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: (
       </label>
       <label>Port<input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) })} /></label>
       <label>Memory MB<input type="number" value={form.memoryMb} onChange={(e) => setForm({ ...form, memoryMb: Number(e.target.value) })} /></label>
-      <label>Java args<input value={form.javaArgs} onChange={(e) => setForm({ ...form, javaArgs: e.target.value })} /></label>
+      <label className="javaArgsField">
+        Java args
+        <textarea
+          value={form.javaArgs}
+          onChange={(e) => setForm({ ...form, javaArgs: e.target.value.replace(/\s*\n\s*/g, " ") })}
+          readOnly={!form.javaArgsEditable}
+        />
+      </label>
+      <div className="sourceBox">
+        <strong>JVM args source</strong>
+        <span>{sourceLabel(form.javaArgsSourceType)}{form.javaArgsSourcePath ? ` - ${form.javaArgsSourcePath}` : ""}</span>
+        {!form.javaArgsEditable && <small>Detected from server files and kept read-only to avoid rewriting modpack launch scripts.</small>}
+        {form.javaArgsEditable && <small>Saving updates `user_jvm_args.txt` and keeps `-Xmx` aligned with memory MB.</small>}
+        <button type="button" onClick={refreshJavaArgs}><RefreshCw size={16} />Refresh from files</button>
+      </div>
       <label>Backup cron<input value={form.backupCron} onChange={(e) => setForm({ ...form, backupCron: e.target.value })} /></label>
       <label>Retention<input type="number" value={form.backupRetention} onChange={(e) => setForm({ ...form, backupRetention: Number(e.target.value) })} /></label>
       <label className="check"><input type="checkbox" checked={form.rconEnabled} onChange={(e) => setForm({ ...form, rconEnabled: e.target.checked })} />RCON enabled</label>
@@ -413,6 +434,13 @@ function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: (
       <div className="formActions"><button className="primary"><Save size={16} />Save</button>{message && <span className="ok">{message}</span>}</div>
     </form>
   );
+}
+
+function sourceLabel(source: ManagedServer["javaArgsSourceType"]) {
+  if (source === "user_jvm_args") return "user_jvm_args.txt";
+  if (source === "script") return "launch script";
+  if (source === "systemd") return "systemd ExecStart";
+  return "app default";
 }
 
 function FileEditor({ server }: { server: ManagedServer }) {
