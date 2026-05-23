@@ -19,7 +19,7 @@ Environment=MCSC_USE_SUDO=true
 ExecStart=/usr/bin/node /opt/mc-server-configurator/dist/server/index.js
 Restart=on-failure
 RestartSec=5
-NoNewPrivileges=true
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=full
 ReadWritePaths=/var/lib/mc-server-configurator /home/amacovis/Desktop/minecraft /opt/minecraft/backups
