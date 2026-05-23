@@ -2,6 +2,7 @@ mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft*.service
 mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl stop minecraft*.service
 mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl restart minecraft*.service
 mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl is-active minecraft*.service
+mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl reset-failed minecraft*.service
 mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl list-units --type=service --all --no-legend --plain
 mcsc ALL=(root) NOPASSWD: /usr/bin/systemctl show *.service --property=Id\,Description\,WorkingDirectory\,ExecStart\,FragmentPath --no-pager
 mcsc ALL=(root) NOPASSWD: /usr/bin/journalctl -u minecraft*.service *

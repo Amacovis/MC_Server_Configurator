@@ -5,6 +5,7 @@ import { assertJavaArgs, assertPort, assertServiceName, editableFileForKey, serv
 describe("command safety", () => {
   it("builds systemctl arguments without shell interpolation", () => {
     expect(systemctlArgs("start", "minecraft-survival.service")).toEqual(["systemctl", "start", "minecraft-survival.service"]);
+    expect(systemctlArgs("reset-failed", "minecraft4.service")).toEqual(["systemctl", "reset-failed", "minecraft4.service"]);
   });
 
   it("resolves sudo-controlled commands to sudoers-compatible paths on linux", () => {

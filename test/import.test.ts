@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapServer } from "../src/server/systemd";
+import { getStatus, mapServer } from "../src/server/systemd";
 
 describe("server row mapping", () => {
   it("maps database rows to UI server records", () => {
@@ -23,5 +23,8 @@ describe("server row mapping", () => {
     expect(server.unitName).toBe("minecraft-survival.service");
     expect(server.rconEnabled).toBe(true);
   });
-});
 
+  it("treats systemd failed state as stopped for Minecraft screen shutdowns", async () => {
+    await expect(getStatus("minecraft4.service")).resolves.toBe("stopped");
+  });
+});
