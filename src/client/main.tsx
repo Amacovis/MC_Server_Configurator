@@ -19,6 +19,7 @@ import {
   Wrench
 } from "lucide-react";
 import type { AuthUser, CreateServerRequest, EditableFile, InstallJob, ManagedServer, ModpackSearchResult, ModpackVersion } from "../shared/types";
+import type { ExternalSchedule, ImportPreview, ServerAction } from "../shared/types";
 import "./styles.css";
 
 type View = "servers" | "server" | "settings" | "files" | "backups" | "create" | "jobs" | "appSettings";
@@ -167,6 +168,7 @@ function Servers() {
   const [servers, setServers] = useState<ManagedServer[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
 
   async function load() {
     setLoading(true);
@@ -185,20 +187,67 @@ function Servers() {
   }, []);
 
   async function importServers() {
-    const result = await api.request<{ imported: number; servers: ManagedServer[] }>("/servers/import", { method: "POST" });
-    setServers(result.servers);
+    setPreview(await api.request<ImportPreview>("/servers/import/preview"));
   }
 
   return (
     <section>
       <Header title="Servers" subtitle="Systemd-backed Minecraft instances" actions={<><button onClick={importServers}><RefreshCw size={16} />Import</button><button className="primary" onClick={() => go("/create")}><FolderPlus size={16} />New server</button></>} />
       {error && <p className="error">{error}</p>}
+      {preview && <ImportPreviewPanel preview={preview} onClose={() => setPreview(null)} onImported={(items) => { setServers(items); setPreview(null); }} />}
       {loading ? <p className="muted">Loading servers...</p> : null}
       <div className="serverGrid">
         {servers.map((server) => <ServerCard key={server.id} server={server} onReload={load} />)}
         {!loading && servers.length === 0 && <EmptyState title="No servers registered" action="Import existing directories or create a new server." />}
       </div>
     </section>
+  );
+}
+
+function ImportPreviewPanel({ preview, onClose, onImported }: { preview: ImportPreview; onClose: () => void; onImported: (servers: ManagedServer[]) => void }) {
+  const [selected, setSelected] = useState(() => new Set(preview.items.filter((item) => !item.alreadyImported && item.confidence !== "unmatched").map((item) => item.id)));
+  const [message, setMessage] = useState("");
+
+  function toggle(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  }
+
+  async function confirmImport() {
+    const result = await api.request<{ imported: number; servers: ManagedServer[] }>("/servers/import", {
+      method: "POST",
+      body: JSON.stringify({ selectedIds: Array.from(selected) })
+    });
+    setMessage(`Imported ${result.imported} server${result.imported === 1 ? "" : "s"}.`);
+    onImported(result.servers);
+  }
+
+  return (
+    <div className="panel importPanel">
+      <div className="toolbar">
+        <strong>Import preview</strong>
+        <span className="muted">{preview.serverRoot}</span>
+        <button onClick={onClose}>Close</button>
+      </div>
+      <div className="previewList">
+        {preview.items.map((item) => (
+          <label className="previewItem" key={item.id}>
+            <input type="checkbox" checked={selected.has(item.id)} disabled={item.alreadyImported} onChange={() => toggle(item.id)} />
+            <span>
+              <strong>{item.name}</strong>
+              <small>{item.directory}</small>
+              <small>{item.unitName} - {item.confidence} via {item.unitMatchSource}</small>
+              <small>{item.scripts.filter((script) => script.safe).length} safe scripts, {item.externalSchedules.length} external schedules</small>
+              {item.warnings.length > 0 && <small className="warnText">{item.warnings.join(" ")}</small>}
+            </span>
+          </label>
+        ))}
+      </div>
+      {preview.unmatchedServices.length > 0 && <p className="warn">Unmatched services found: {preview.unmatchedServices.map((service) => service.unitName).join(", ")}</p>}
+      <div className="formActions"><button className="primary" onClick={confirmImport}>Import selected</button>{message && <span className="ok">{message}</span>}</div>
+    </div>
   );
 }
 
@@ -275,11 +324,37 @@ function Overview({ server, logs }: { server: ManagedServer; logs: string }) {
           <dt>Memory</dt><dd>{server.memoryMb} MB</dd>
           <dt>Backup</dt><dd>{server.backupCron} / {server.backupMode}</dd>
         </dl>
+        <ServerActions server={server} />
       </div>
       <div className="panel logs">
         <h2>Recent logs</h2>
         <pre>{logs}</pre>
       </div>
+    </div>
+  );
+}
+
+function ServerActions({ server }: { server: ManagedServer }) {
+  const [actions, setActions] = useState<ServerAction[]>([]);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    api.request<ServerAction[]>(`/servers/${server.id}/actions`).then(setActions).catch(() => setActions([]));
+  }, [server.id]);
+
+  async function run(action: ServerAction) {
+    setMessage(`Running ${action.name}...`);
+    const result = await api.request<{ stdout: string; stderr: string }>(`/servers/${server.id}/actions/${action.id}/run`, { method: "POST" });
+    setMessage(result.stdout || `${action.name} completed.`);
+  }
+
+  if (actions.length === 0) return <p className="muted actionNote">No discovered server scripts registered.</p>;
+
+  return (
+    <div className="actionPanel">
+      <h2>Script actions</h2>
+      <div className="actions">{actions.map((action) => <button key={action.id} onClick={() => run(action)}><Wrench size={16} />{action.name}</button>)}</div>
+      {message && <pre className="actionOutput">{message}</pre>}
     </div>
   );
 }
@@ -345,10 +420,12 @@ function FileEditor({ server }: { server: ManagedServer }) {
 
 function Backups({ server }: { server: ManagedServer }) {
   const [items, setItems] = useState<Record<string, string>[]>([]);
+  const [externalSchedules, setExternalSchedules] = useState<ExternalSchedule[]>([]);
   const [message, setMessage] = useState("");
 
   async function load() {
     setItems(await api.request<Record<string, string>[]>(`/servers/${server.id}/backups`));
+    setExternalSchedules(await api.request<ExternalSchedule[]>(`/servers/${server.id}/external-schedules`));
   }
 
   useEffect(() => {
@@ -365,6 +442,18 @@ function Backups({ server }: { server: ManagedServer }) {
     <div className="panel">
       <div className="toolbar"><button className="primary" onClick={run}><Archive size={16} />Run backup</button>{message && <span>{message}</span>}</div>
       {!server.rconEnabled && server.backupMode === "online" && <p className="warn">Online backups need RCON enabled. Switch this server to stop-then-backup or enable RCON before relying on scheduled backups.</p>}
+      <div className="scheduleSplit">
+        <div>
+          <h2>App-managed schedule</h2>
+          <p><strong>{server.backupCron}</strong> / {server.backupMode} / keep {server.backupRetention}</p>
+        </div>
+        <div>
+          <h2>External crontab schedules</h2>
+          {externalSchedules.length === 0 ? <p className="muted">No matching crontab entries imported.</p> : (
+            <table><thead><tr><th>When</th><th>Kind</th><th>Command</th></tr></thead><tbody>{externalSchedules.map((item) => <tr key={item.id}><td>{item.expression}</td><td>{item.kind}</td><td>{item.command}</td></tr>)}</tbody></table>
+          )}
+        </div>
+      </div>
       <table><thead><tr><th>Created</th><th>Status</th><th>Mode</th><th>Message</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td>{item.created_at}</td><td>{item.status}</td><td>{item.mode}</td><td>{item.message}</td></tr>)}</tbody></table>
     </div>
   );
@@ -470,4 +559,3 @@ function EmptyState({ title, action }: { title: string; action: string }) {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
-

@@ -33,3 +33,12 @@ sudo ./scripts/install-linux.sh
 
 The setup script creates an app user, directories, a configurator `systemd` unit, and a sudoers file that only permits vetted service/log/archive operations.
 
+For your current Linux layout, the packaged service defaults to:
+
+```bash
+MCSC_SERVER_ROOT=/home/amacovis/Desktop/minecraft
+MCSC_CRONTAB_USER=amacovis
+MCSC_BACKUP_ROOT=/opt/minecraft/backups
+```
+
+Import now starts with a preview. It scans each direct child folder under `MCSC_SERVER_ROOT`, inspects matching `systemd` unit metadata, detects safe backup/restart scripts in each server folder, and imports matching `crontab -e` entries as read-only external schedules.

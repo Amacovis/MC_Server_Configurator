@@ -2,6 +2,9 @@ export type ServerStatus = "running" | "stopped" | "failed" | "unknown";
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "manual_required";
 export type BackupMode = "online" | "stop_then_backup";
 export type ModpackProvider = "modrinth" | "curseforge";
+export type DiscoveryConfidence = "high" | "medium" | "low" | "unmatched";
+export type ServerActionKind = "backup" | "restart" | "start" | "stop" | "custom";
+export type ExternalScheduleKind = "backup" | "restart" | "unknown";
 
 export interface ManagedServer {
   id: string;
@@ -106,3 +109,53 @@ export interface AuditEvent {
   createdAt: string;
 }
 
+export interface DiscoveredScript {
+  id: string;
+  name: string;
+  kind: ServerActionKind;
+  path: string;
+  safe: boolean;
+  reason?: string;
+}
+
+export interface ExternalSchedule {
+  id: string;
+  serverId?: string;
+  kind: ExternalScheduleKind;
+  expression: string;
+  command: string;
+  source: string;
+  readOnly: boolean;
+  createdAt?: string;
+}
+
+export interface ImportPreviewItem {
+  id: string;
+  name: string;
+  directory: string;
+  unitName: string;
+  unitMatchSource: string;
+  confidence: DiscoveryConfidence;
+  port: number;
+  memoryMb: number;
+  javaArgs: string;
+  alreadyImported: boolean;
+  scripts: DiscoveredScript[];
+  externalSchedules: ExternalSchedule[];
+  warnings: string[];
+}
+
+export interface ImportPreview {
+  serverRoot: string;
+  items: ImportPreviewItem[];
+  unmatchedServices: Array<{ unitName: string; description?: string; matchedText?: string }>;
+}
+
+export interface ServerAction {
+  id: string;
+  serverId: string;
+  name: string;
+  kind: ServerActionKind;
+  scriptPath: string;
+  createdAt: string;
+}

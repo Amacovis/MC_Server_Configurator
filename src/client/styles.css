@@ -187,6 +187,30 @@ label {
   gap: 14px;
 }
 
+.importPanel {
+  margin-bottom: 16px;
+}
+
+.previewList {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.previewItem {
+  grid-template-columns: 18px 1fr;
+  align-items: flex-start;
+  border: 1px solid #d8e0e5;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfd;
+}
+
+.previewItem span {
+  display: grid;
+  gap: 3px;
+}
+
 .serverCard,
 .panel,
 .empty {
@@ -303,6 +327,21 @@ dd {
   overflow: auto;
 }
 
+.actionPanel {
+  margin-top: 18px;
+  border-top: 1px solid #e2e8ec;
+  padding-top: 14px;
+}
+
+.actionNote {
+  margin-top: 18px;
+}
+
+.actionOutput {
+  margin-top: 10px;
+  max-height: 160px;
+}
+
 .formGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(180px, 1fr));
@@ -396,6 +435,18 @@ td {
   padding: 10px;
 }
 
+.warnText {
+  color: #8a4b0f;
+}
+
+.scheduleSplit {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 14px;
+  align-items: start;
+  margin-top: 14px;
+}
+
 .ok {
   color: #166534;
 }
@@ -428,8 +479,8 @@ td {
   }
 
   .split,
-  .formGrid {
+  .formGrid,
+  .scheduleSplit {
     grid-template-columns: 1fr;
   }
 }
-

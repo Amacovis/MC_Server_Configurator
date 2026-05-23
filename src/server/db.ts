@@ -82,6 +82,28 @@ function migrate(db: Db) {
       detail TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS server_actions (
+      id TEXT PRIMARY KEY,
+      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      script_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(server_id, script_path)
+    );
+
+    CREATE TABLE IF NOT EXISTS external_schedules (
+      id TEXT PRIMARY KEY,
+      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      expression TEXT NOT NULL,
+      command TEXT NOT NULL,
+      source TEXT NOT NULL,
+      read_only INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      UNIQUE(server_id, expression, command)
+    );
   `);
 }
 
@@ -108,4 +130,3 @@ export function audit(db: Db, actor: string, action: string, target: string, det
     new Date().toISOString()
   );
 }
-
