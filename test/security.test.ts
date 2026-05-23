@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { journalctlArgs, systemctlArgs } from "../src/server/commands";
+import { journalctlArgs, resolveCommand, systemctlArgs } from "../src/server/commands";
 import { assertJavaArgs, assertPort, assertServiceName, editableFileForKey, serviceNameForServerName } from "../src/server/security";
 
 describe("command safety", () => {
   it("builds systemctl arguments without shell interpolation", () => {
     expect(systemctlArgs("start", "minecraft-survival.service")).toEqual(["systemctl", "start", "minecraft-survival.service"]);
+  });
+
+  it("resolves sudo-controlled commands to sudoers-compatible paths on linux", () => {
+    const expected = process.platform === "linux" ? "/usr/bin/systemctl" : "systemctl";
+    expect(resolveCommand("systemctl")).toBe(expected);
   });
 
   it("rejects unsafe service names", () => {
