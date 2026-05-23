@@ -22,8 +22,9 @@ export async function runCommand(command: string, args: string[], timeoutMs = 30
     return { stdout: mockOutput(command, args), stderr: "", code: 0 };
   }
 
-  const executable = config.sudo ? "sudo" : command;
-  const finalArgs = config.sudo ? [command, ...args] : args;
+  const resolvedCommand = resolveCommand(command);
+  const executable = config.sudo ? "sudo" : resolvedCommand;
+  const finalArgs = config.sudo ? [resolvedCommand, ...args] : args;
 
   return new Promise((resolve, reject) => {
     const child = spawn(executable, finalArgs, { stdio: ["ignore", "pipe", "pipe"] });
@@ -44,9 +45,20 @@ export async function runCommand(command: string, args: string[], timeoutMs = 30
   });
 }
 
+export function resolveCommand(command: string) {
+  if (command.includes("/") || process.platform !== "linux") return command;
+  const paths: Record<string, string> = {
+    systemctl: "/usr/bin/systemctl",
+    journalctl: "/usr/bin/journalctl",
+    tar: "/usr/bin/tar",
+    crontab: "/usr/bin/crontab",
+    "mcsc-rcon": "/usr/local/bin/mcsc-rcon"
+  };
+  return paths[command] ?? command;
+}
+
 function mockOutput(command: string, args: string[]) {
   if (command === "systemctl" && args[0] === "is-active") return "inactive\n";
   if (command === "journalctl") return "2026-05-23T12:00:00 mock minecraft server log line\n";
   return `mocked ${command} ${args.join(" ")}\n`;
 }
-
