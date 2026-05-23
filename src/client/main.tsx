@@ -16,6 +16,7 @@ import {
   Settings,
   Square,
   Terminal,
+  Trash2,
   Wrench
 } from "lucide-react";
 import type { AuthUser, CreateServerRequest, EditableFile, InstallJob, ManagedServer, ModpackSearchResult, ModpackVersion, ServiceTestResult } from "../shared/types";
@@ -399,6 +400,13 @@ function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: (
     onSaved();
   }
 
+  async function removeFromUi() {
+    const ok = window.confirm(`Remove "${server.name}" from the UI? This will not delete files from ${server.directory}.`);
+    if (!ok) return;
+    await api.request(`/servers/${server.id}`, { method: "DELETE" });
+    go("/servers");
+  }
+
   return (
     <form className="panel formGrid" onSubmit={save}>
       <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
@@ -432,6 +440,11 @@ function ServerSettings({ server, onSaved }: { server: ManagedServer; onSaved: (
       <label>Backup mode<select value={form.backupMode} onChange={(e) => setForm({ ...form, backupMode: e.target.value as ManagedServer["backupMode"] })}><option value="online">Online</option><option value="stop_then_backup">Stop then backup</option></select></label>
       {serviceTest && <p className={serviceTest.existsLikely ? "ok serviceResult" : "warn serviceResult"}>{serviceTest.message}</p>}
       <div className="formActions"><button className="primary"><Save size={16} />Save</button>{message && <span className="ok">{message}</span>}</div>
+      <div className="dangerZone">
+        <strong>Remove server from UI</strong>
+        <span>This only unregisters the server from this app. It does not delete the server folder, worlds, scripts, backups, or systemd unit.</span>
+        <button type="button" className="dangerButton" onClick={removeFromUi}><Trash2 size={16} />Remove from UI</button>
+      </div>
     </form>
   );
 }

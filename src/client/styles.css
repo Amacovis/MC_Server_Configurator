@@ -394,6 +394,31 @@ dd {
   width: fit-content;
 }
 
+.dangerZone {
+  grid-column: 1 / -1;
+  border: 1px solid #f0b4aa;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 7px;
+  background: #fff7f5;
+}
+
+.dangerZone span {
+  color: #6b5a55;
+}
+
+button.dangerButton {
+  width: fit-content;
+  border-color: #c2410c;
+  color: #9a3412;
+  background: #ffffff;
+}
+
+button.dangerButton:hover {
+  background: #ffedd5;
+}
+
 .fileList {
   display: grid;
   gap: 8px;

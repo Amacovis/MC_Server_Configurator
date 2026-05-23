@@ -21,6 +21,7 @@ function SettingsSmoke() {
       </label>
       <button type="button">Test</button>
       <button>Save</button>
+      <button type="button">Remove from UI</button>
     </form>
   );
 }
@@ -38,5 +39,6 @@ describe("ui smoke", () => {
     expect(screen.getByLabelText("Systemd service")).toHaveValue("minecraft2-service.service");
     expect(screen.getByRole("button", { name: "Test" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove from UI" })).toBeInTheDocument();
   });
 });
