@@ -8,7 +8,7 @@ import { authHandlers, requireAuth } from "./auth.js";
 import { runBackup, validateCron } from "./backups.js";
 import { runCommand } from "./commands.js";
 import { buildImportPreview, discoverSystemdUnits } from "./discovery.js";
-import { readEditableFile, writeEditableFile } from "./files.js";
+import { listLogFiles, readEditableFile, readLogFile, writeEditableFile } from "./files.js";
 import { discoverJavaArgs, writeUserJvmArgs } from "./javaArgs.js";
 import { getVersions, searchModpacks } from "./modpacks.js";
 import { assertDisplayName, assertJavaArgs, assertMemory, assertPort, editableFiles, resolveServerPath, serviceNameForServerName } from "./security.js";
@@ -169,6 +169,24 @@ export function createRouter(db: Db) {
     try {
       const server = getServer(db, req.params.id);
       res.type("text/plain").send(await getLogs(server.unitName, Number(req.query.lines ?? 200)));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/servers/:id/log-files", (req, res, next) => {
+    try {
+      const server = getServer(db, req.params.id);
+      res.json(listLogFiles(server.directory));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/servers/:id/log-files/:fileName", (req, res, next) => {
+    try {
+      const server = getServer(db, req.params.id);
+      res.json(readLogFile(server.directory, req.params.fileName));
     } catch (error) {
       next(error);
     }

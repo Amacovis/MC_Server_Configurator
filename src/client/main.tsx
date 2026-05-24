@@ -19,11 +19,11 @@ import {
   Trash2,
   Wrench
 } from "lucide-react";
-import type { AuthUser, CreateServerRequest, EditableFile, InstallJob, ManagedServer, ModpackSearchResult, ModpackVersion, ServiceTestResult } from "../shared/types";
+import type { AuthUser, CreateServerRequest, EditableFile, InstallJob, ManagedServer, ModpackSearchResult, ModpackVersion, ServerLogContent, ServerLogFile, ServiceTestResult } from "../shared/types";
 import type { ExternalSchedule, ImportPreview, ServerAction } from "../shared/types";
 import "./styles.css";
 
-type View = "servers" | "server" | "settings" | "files" | "backups" | "create" | "jobs" | "appSettings";
+type View = "servers" | "server" | "settings" | "files" | "logs" | "backups" | "create" | "jobs" | "appSettings";
 
 const api = {
   async request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -63,6 +63,7 @@ function App() {
       {nav.view === "server" && <ServerDetail id={nav.id!} tab="overview" />}
       {nav.view === "settings" && <ServerDetail id={nav.id!} tab="settings" />}
       {nav.view === "files" && <ServerDetail id={nav.id!} tab="files" />}
+      {nav.view === "logs" && <ServerDetail id={nav.id!} tab="logs" />}
       {nav.view === "backups" && <ServerDetail id={nav.id!} tab="backups" />}
       {nav.view === "create" && <CreateServer />}
       {nav.view === "jobs" && <Jobs />}
@@ -79,6 +80,7 @@ function parseRoute(pathname: string): { view: View; id?: string } {
   if (parts[0] === "servers" && parts[1]) {
     if (parts[2] === "settings") return { view: "settings", id: parts[1] };
     if (parts[2] === "files") return { view: "files", id: parts[1] };
+    if (parts[2] === "logs") return { view: "logs", id: parts[1] };
     if (parts[2] === "backups") return { view: "backups", id: parts[1] };
     return { view: "server", id: parts[1] };
   }
@@ -141,7 +143,7 @@ function Shell({ user, active, onLogout, children }: { user: AuthUser; active: V
           <strong>MCSC</strong>
         </div>
         <nav>
-          <NavButton active={["servers", "server", "settings", "files", "backups"].includes(active)} icon={<Terminal />} label="Servers" path="/servers" />
+          <NavButton active={["servers", "server", "settings", "files", "logs", "backups"].includes(active)} icon={<Terminal />} label="Servers" path="/servers" />
           <NavButton active={active === "create"} icon={<FolderPlus />} label="Create" path="/create" />
           <NavButton active={active === "jobs"} icon={<History />} label="Jobs" path="/jobs" />
           <NavButton active={active === "appSettings"} icon={<Settings />} label="Settings" path="/settings" />
@@ -288,7 +290,7 @@ function ServerCard({ server, onReload }: { server: ManagedServer; onReload: () 
   );
 }
 
-function ServerDetail({ id, tab }: { id: string; tab: "overview" | "settings" | "files" | "backups" }) {
+function ServerDetail({ id, tab }: { id: string; tab: "overview" | "settings" | "files" | "logs" | "backups" }) {
   const [server, setServer] = useState<ManagedServer | null>(null);
   const [logs, setLogs] = useState("");
 
@@ -311,14 +313,87 @@ function ServerDetail({ id, tab }: { id: string; tab: "overview" | "settings" | 
         <button className={tab === "overview" ? "selected" : ""} onClick={() => go(`/servers/${id}`)}>Overview</button>
         <button className={tab === "settings" ? "selected" : ""} onClick={() => go(`/servers/${id}/settings`)}>Settings</button>
         <button className={tab === "files" ? "selected" : ""} onClick={() => go(`/servers/${id}/files`)}>Files</button>
+        <button className={tab === "logs" ? "selected" : ""} onClick={() => go(`/servers/${id}/logs`)}>Logs</button>
         <button className={tab === "backups" ? "selected" : ""} onClick={() => go(`/servers/${id}/backups`)}>Backups</button>
       </div>
       {tab === "overview" && <Overview server={server} logs={logs} />}
       {tab === "settings" && <ServerSettings server={server} onSaved={load} />}
       {tab === "files" && <FileEditor server={server} />}
+      {tab === "logs" && <LogViewer server={server} />}
       {tab === "backups" && <Backups server={server} />}
     </section>
   );
+}
+
+function LogViewer({ server }: { server: ManagedServer }) {
+  const [files, setFiles] = useState<ServerLogFile[]>([]);
+  const [active, setActive] = useState("");
+  const [log, setLog] = useState<ServerLogContent | null>(null);
+  const [error, setError] = useState("");
+
+  async function loadFiles(selectName?: string) {
+    setError("");
+    const items = await api.request<ServerLogFile[]>(`/servers/${server.id}/log-files`);
+    setFiles(items);
+    setActive(selectName ?? items[0]?.name ?? "");
+  }
+
+  useEffect(() => {
+    void loadFiles();
+  }, [server.id]);
+
+  useEffect(() => {
+    if (!active) {
+      setLog(null);
+      return;
+    }
+    api
+      .request<ServerLogContent>(`/servers/${server.id}/log-files/${encodeURIComponent(active)}`)
+      .then((value) => {
+        setLog(value);
+        setError("");
+      })
+      .catch((err) => {
+        setLog(null);
+        setError(err instanceof Error ? err.message : "Failed to load log file");
+      });
+  }, [active, server.id]);
+
+  return (
+    <div className="split">
+      <div className="panel fileList">
+        <div className="toolbar">
+          <strong>Log files</strong>
+          <button onClick={() => loadFiles(active)} title="Refresh logs"><RefreshCw size={16} /></button>
+        </div>
+        {files.map((file) => (
+          <button className={file.name === active ? "selected" : ""} key={file.name} onClick={() => setActive(file.name)}>
+            <FileText size={16} />
+            <span>
+              {file.name}
+              <small>{formatBytes(file.size)}</small>
+            </span>
+          </button>
+        ))}
+        {files.length === 0 && <p className="muted">No log files found in {server.directory}/logs.</p>}
+      </div>
+      <div className="panel logs logViewer">
+        <div className="toolbar">
+          <h2>{log?.relativePath ?? "Log preview"}</h2>
+          {log && <span className="muted">{formatBytes(log.size)} - {new Date(log.modifiedAt).toLocaleString()}</span>}
+        </div>
+        {error && <p className="error">{error}</p>}
+        {log?.truncated && <p className="warn">Showing the most recent portion of this log.</p>}
+        <pre>{log?.content ?? ""}</pre>
+      </div>
+    </div>
+  );
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function Overview({ server, logs }: { server: ManagedServer; logs: string }) {
