@@ -74,6 +74,18 @@ export interface EditableFile {
   language: "properties" | "json" | "text";
 }
 
+export interface ServerLogFile {
+  name: string;
+  relativePath: string;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface ServerLogContent extends ServerLogFile {
+  content: string;
+  truncated: boolean;
+}
+
 export interface ModpackSearchResult {
   provider: ModpackProvider;
   id: string;

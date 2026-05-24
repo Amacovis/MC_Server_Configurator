@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { journalctlArgs, resolveCommand, systemctlArgs } from "../src/server/commands";
-import { assertJavaArgs, assertPort, assertServiceName, editableFileForKey, serviceNameForServerName } from "../src/server/security";
+import { assertJavaArgs, assertLogFileName, assertPort, assertServiceName, editableFileForKey, serviceNameForServerName } from "../src/server/security";
 
 describe("command safety", () => {
   it("builds systemctl arguments without shell interpolation", () => {
@@ -36,6 +36,13 @@ describe("command safety", () => {
   it("limits editable files to known keys", () => {
     expect(editableFileForKey("serverProperties").relativePath).toBe("server.properties");
     expect(() => editableFileForKey("../../shadow")).toThrow();
+  });
+
+  it("limits log viewing to direct log folder files", () => {
+    expect(assertLogFileName("latest.log")).toBe("latest.log");
+    expect(assertLogFileName("2026-05-24-1.log.gz")).toBe("2026-05-24-1.log.gz");
+    expect(() => assertLogFileName("../latest.log")).toThrow();
+    expect(() => assertLogFileName("server.properties")).toThrow();
   });
 
   it("derives predictable systemd service names", () => {

@@ -3,6 +3,7 @@ import { config } from "./config.js";
 
 const servicePattern = /^[A-Za-z0-9@_.-]+\.service$/;
 const namePattern = /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,63}$/;
+const logFilePattern = /^[A-Za-z0-9][A-Za-z0-9_. -]{0,127}(?:\.log|\.txt|\.gz)$/;
 
 export const editableFiles = [
   { key: "serverProperties", label: "server.properties", relativePath: "server.properties", language: "properties" as const },
@@ -63,8 +64,14 @@ export function editableFileForKey(key: string) {
   return file;
 }
 
+export function assertLogFileName(value: string) {
+  if (!logFilePattern.test(value) || value.includes("..") || value.includes("/") || value.includes("\\")) {
+    throw new Error("Invalid log file name.");
+  }
+  return value;
+}
+
 export function serviceNameForServerName(name: string) {
   const slug = assertDisplayName(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `minecraft-${slug}.service`;
 }
-
